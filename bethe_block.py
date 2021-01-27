@@ -1,7 +1,6 @@
 import numpy as np
 from numpy import pi, log, sqrt
 
-rho = 1  # g/cm3
 mp = 938.  # MeV
 Na = 6.02e23  # particules per mole (Avogadro number)
 Mu = 1.  # g/mol (molar mass constant)
