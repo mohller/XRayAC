@@ -33,7 +33,7 @@ def bethe_bloch(KE, Z=3., A=6., rho=1., relativistic=True, I=None):
 
 
 
-def stopping_power(KE, Z=3., A=6., rho=1., **kwargs):
+def stoping_power(KE, Z=3., A=6., rho=1., **kwargs):
     """Returns the differential energy loss per thickness
     for protons of kinetic energy KE (not relativistic) in 
     a medium with density rho
@@ -43,6 +43,22 @@ def stopping_power(KE, Z=3., A=6., rho=1., **kwargs):
     https://physics.nist.gov/PhysRefData/Star/Text/programs.html
     """ 
     return bethe_bloch(KE, Z, A, rho, **kwargs) / rho
+
+
+def CE_range(E0=10, stoping_power):
+    """Returns the range assuming a continuos approximation.
+    The result is the integration of stoping_power from 0 to an estimated
+    maximal thickness. Then finding the thickness t0 for which the integral
+    is equal to the total initial energy E0.
+
+    Arguments:
+    ---------
+    E0: [float], total initial energy of protons
+    stoping_power : [function] returns the stopping power
+    """
+    # it is not yet implemented
+
+    return None
 
 
 def burells_formula(energies, material=None):
