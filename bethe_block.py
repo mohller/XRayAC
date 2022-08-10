@@ -1,36 +1,96 @@
+# from cmath import sqrt
 import numpy as np
-from numpy import pi, log, sqrt
+from scipy.integrate import cumtrapz
+# import molmass
+from numpy import sqrt, log, logspace
+from scipy.constants import pi, c, epsilon_0, N_A, e, m_e, m_p, eV, milli, mega, centi
 
-mp = 938.  # MeV
-Na = 6.02e23  # particules per mole (Avogadro number)
-Mu = 1.  # g/mol (molar mass constant)
-e = 1.6e-19  # Coulomb (electron charge)
-ke = 9e9  # Nm2/C2
-# konst = e**2/4/pi/eps0 = e**2 * ke, in units N*m**2 = J*m = 1/e eV*m = 1E-4/e eV*m
-konst = e * ke * 1e-4 # MeV * cm 
 
-def bethe_bloch(KE, Z=3., A=6., rho=1., relativistic=True, I=None):
+def bethe_bloch(KE, Z=3., A=6., rho=1., I=None):
     """Returns the differential energy loss per depth
     for protons of speed v (not relativistic) in a medium
     with density rho as a function of the kinetic energy 
     KE = m * v**2 / 2 in MeV units
 
     https://en.wikipedia.org/wiki/Bethe_formula (non relativistic formula eq(2))
-    """ 
-    M = A  # grams / mol (molar mass)
-    rho2 = rho * 1e-3  # to g/mm3
-    n = (Na * rho / M ) * Z
-    if I is None:
-        I = 10. * Z * 1e-6  # MeV (mean excitation potential of Block, see wikipedia)
-    
-    if relativistic:
-        beta2 = 1 - (KE / mp + 1)**-2  # from relativistic relation: gamma*mp = mp + KE
-        return 4 * pi / mp * n * Z**2 / beta2 * konst**2 * (log(2 * mp * beta2 / I / (1 - beta2)) - beta2)
-    else:  # classic
-        beta2 = 2 * KE / mp # from classic relation KE = mo * beta**2 * c**2 / 2
-        # return 4 * pi * n * Z**2 / mp / v**2 *(e**2/4/pi/eps0)**2 * log(2 * mp * v**2/I)
-        return 2 * pi * n * Z**2 / KE * konst**2 * log(4 * KE / I)  # low energy limit
 
+    Arguments:
+    ==========
+    KE  : Kinetic Energy in MeV
+    Z   : Material's atomic number
+    A   : Material's mass number (and approximate molar mass in g/mol)
+    rho : density in g/cm^3
+
+    Returns
+    =======
+    dEdx : positive value of energy loss per unit distance (MeV/mm)
+    """
+    Zp = 1
+    E = KE + m_p * c**2 * mega * eV
+    n = N_A * Z * (rho / centi**3) / A # electron density in m^-3
+    
+    if I is None:
+        I = 10. * Z # eV (mean excitation potential of Block, see wikipedia)
+    
+    beta2 = 1 - (1 + E * eV * mega / m_p / c**2)**-2  # from relativistic relation: gamma*mp = mp + KE
+    Zp *= 1 - np.exp(-125*sqrt(beta2)*Zp**(-2./3)) # from https://de.wikipedia.org/wiki/Bethe-Formel
+
+    constant_term = 2 * pi * n * Zp**2 / m_e / c**2 * (e**2 / 4 / pi / epsilon_0)**2
+    
+    dEdx = 2 * constant_term / beta2 * (log(2 * m_e*c**2/eV * beta2 / I / (1 - beta2)) - beta2)
+
+    # Advanced formula with further relativistic corrections
+    # See also Wm from https://journals.sagepub.com/doi/pdf/10.1093/jicru_os25.2.6
+    # dEdx = 2 * constant_term / beta2 * (
+    #     log(2 * m_e*c**2/eV * beta2 / I / (1 - beta2))
+    #     - 1/2. * log(1 + 2/sqrt(1-beta2)*m_e/m_p + (m_e/m_p)**2) 
+    #     - beta2)
+
+    return dEdx / eV / mega * milli
+
+
+def bethe_bloch_aluminum_semicorrected(KE):
+    """A specific correction valid between 1-100 MeV for protons on aluminum
+    which explains the difference between my implementation of the bethe formula
+    in the bethe_block function, and the comparison values from NIST and wikipedia.
+
+    The correction here removes the ionization potential I, and adds a 5.25 value
+    to the logarithmic term of the expression in bethe_bloch.
+
+    Value 5.25 obtained from http://www.srim.org/SRIM/SRIMPICS/IPLOTS/IPLOT13.gif
+
+    This function should be removed once a suitable expression or table of values
+    for the shell correction is found. A possible implementation could be produced
+    using the publication JETP Letters volume 94, Article number: 1 (2011) 
+
+    A detailed discussion can be found in 
+    Ziegler, J. F., Journal of Applied Physics 85, 1249 (1999) while an the actual
+    values and formulas used in PSTAR program of NIST are available in
+    https://journals.sagepub.com/toc/crub/os-25/2 which is unaccessible to me.
+
+    Arguments:
+    ==========
+    KE  : Kinetic Energy in MeV
+
+    Returns
+    =======
+    dEdx : positive value of energy loss per unit distance (MeV/mm)
+    """
+    Z = 13
+    A = 27
+    rho = 2.69
+    Zp = 1
+    E = KE + m_p * c**2 * mega * eV
+    n = N_A * Z * (rho / centi**3) / A # electron density in m^-3
+    
+    beta2 = 1 - (1 + E * eV * mega / m_p / c**2)**-2  # from relativistic relation: gamma*mp = mp + KE
+    Zp *= 1 - np.exp(-125*sqrt(beta2)*Zp**(-2./3)) # from https://de.wikipedia.org/wiki/Bethe-Formel
+
+    constant_term = 2 * pi * n * Zp**2 / m_e / c**2 * (e**2 / 4 / pi / epsilon_0)**2
+    
+    dEdx = 2 * constant_term / beta2 * (log(2 * m_e*c**2/eV * beta2 / (1 - beta2)) - 5.25 - beta2)
+
+    return dEdx / eV / mega * milli
 
 
 def stoping_power(KE, Z=3., A=6., rho=1., **kwargs):
@@ -41,24 +101,43 @@ def stoping_power(KE, Z=3., A=6., rho=1., **kwargs):
 
     https://en.wikipedia.org/wiki/Bethe_formula (non relativistic formula eq(2))
     https://physics.nist.gov/PhysRefData/Star/Text/programs.html
+
+    Arguments:
+    ==========
+    KE  : Kinetic Energy in MeV
+    Z   : Material's atomic number
+    A   : Material's mass number (and approximate molar mass in g/mol)
+    rho : density in g/cm^3
+
+    Returns
+    =======
+    dEdx : energy loss per unit distance (MeV/mm)
     """ 
     return bethe_bloch(KE, Z, A, rho, **kwargs) / rho
 
 
-def CE_range(E0=10, stoping_power):
+def CE_range(E0=10, *args, **kwargs):
     """Returns the range assuming a continuos approximation.
     The result is the integration of stoping_power from 0 to an estimated
     maximal thickness. Then finding the thickness t0 for which the integral
     is equal to the total initial energy E0.
 
     Arguments:
-    ---------
-    E0: [float], total initial energy of protons
-    stoping_power : [function] returns the stopping power
-    """
-    # it is not yet implemented
+    ----------
+    E0: [float], total initial energy of protons in MeV
 
-    return None
+    Returns:
+    --------
+    dEdx : energy loss per unit distance (MeV/mm)
+    """
+    logE0 = np.log10(E0)
+    logEcut = np.max([logE0 - 3, -3])
+
+    E = logspace(logEcut, logE0, 10*int(logE0 - logEcut))
+
+    SP = bethe_bloch(E, *args, **kwargs)
+    
+    return E[1:], cumtrapz(1./SP, E)
 
 
 def burells_formula(energies, material=None):
